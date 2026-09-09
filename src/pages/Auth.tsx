@@ -1,23 +1,18 @@
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { Zap } from "lucide-react";
+
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/auth")({
-  head: () => ({
-    meta: [
-      { title: "Sign in — Video Speed Reader" },
-      { name: "description", content: "Sign in or create your Video Speed Reader account." },
-      { property: "og:title", content: "Sign in — Video Speed Reader" },
-      { property: "og:description", content: "Sign in or create your Video Speed Reader account." },
-      { property: "og:type", content: "website" },
-    ],
-  }),
-  component: AuthPage,
-});
+type AuthMode = "sign-in" | "sign-up";
 
-function AuthPage() {
-  const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
+export default function AuthPage({ mode }: { mode: AuthMode }) {
+  usePageMeta({
+    title: mode === "sign-in" ? "Sign in — Video Speed Reader" : "Sign up — Video Speed Reader",
+    description: "Sign in or create your Video Speed Reader account.",
+  });
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +40,7 @@ function AuthPage() {
       return;
     }
 
-    navigate({ to: "/app" });
+    navigate("/app");
   }
 
   return (
@@ -122,16 +117,12 @@ function AuthPage() {
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             {mode === "sign-in" ? "New here? " : "Already have an account? "}
-            <button
-              type="button"
-              onClick={() => {
-                setMode(mode === "sign-in" ? "sign-up" : "sign-in");
-                setError(null);
-              }}
+            <Link
+              to={mode === "sign-in" ? "/sign-up" : "/sign-in"}
               className="font-medium text-primary hover:underline"
             >
               {mode === "sign-in" ? "Create an account" : "Sign in"}
-            </button>
+            </Link>
           </p>
         </div>
       </main>

@@ -48,23 +48,69 @@ Design requirements:
 
 Out of scope for this v1: video upload widget, transcript display, payment, custom database tables (do NOT create a `profiles` or `videos` table — only use Supabase's default `auth.users`). Those come in later milestones. Stick to landing page + auth + placeholder dashboard.
 
-This project was built with [Lovable](https://lovable.dev).
+---
 
-## Build with Lovable
+## Tech stack
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/673c514f-4fd7-43ea-8dcc-5cf4edbe7cfa).
+Plain **Vite + React 19 SPA** — no SSR, no server runtime, no edge functions.
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+| Concern    | Choice                                              |
+| ---------- | --------------------------------------------------- |
+| Build      | Vite (`vite build` → static `dist/`)                |
+| Routing    | React Router (client-side)                           |
+| Styling    | Tailwind CSS v4 + shadcn/ui (Radix primitives)       |
+| Auth/data  | Supabase JS client (browser only)                    |
+| Hosting    | Vercel static hosting                                |
+
+### Routes
+
+| Path        | Screen                                                        |
+| ----------- | ------------------------------------------------------------- |
+| `/`         | Public landing page                                            |
+| `/sign-in`  | Sign in                                                        |
+| `/sign-up`  | Sign up                                                        |
+| `/auth`     | Redirects to `/sign-in` (legacy path)                          |
+| `/app`      | Authenticated dashboard — redirects to `/sign-in` when signed out |
+| `*`         | 404                                                            |
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+You need Node.js 20+ and npm.
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+git clone https://github.com/Shaun-xinctex/video-transcript-hub.git
+cd video-transcript-hub
+npm install
+cp .env.example .env   # fill in your Supabase values
+npm run dev            # http://localhost:8080
 ```
+
+Other scripts: `npm run build` (static build to `dist/`), `npm run preview`
+(serve the build locally), `npm run typecheck`, `npm run lint`.
+
+## Environment variables
+
+Both are read at **build time** by Vite and inlined into the bundle, so they
+must be present wherever the build runs — locally in `.env`, and in Vercel.
+
+| Variable                        | Description                                          |
+| ------------------------------- | ---------------------------------------------------- |
+| `VITE_SUPABASE_URL`             | Supabase project URL                                 |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key (`sb_publishable_…`), browser-safe and RLS-gated |
+
+> After changing these in Vercel you must **redeploy** — a rebuild is what
+> bakes the new values into the JavaScript bundle.
+
+## Deploying to Vercel
+
+1. Vercel → **Add New… → Project** → import this GitHub repository.
+2. Vercel reads `vercel.json`, so the framework preset (Vite), build command
+   (`npm run build`) and output directory (`dist`) are already correct.
+3. Under **Settings → Environment Variables**, add `VITE_SUPABASE_URL` and
+   `VITE_SUPABASE_PUBLISHABLE_KEY` for Production, Preview and Development.
+4. Deploy.
+
+`vercel.json` rewrites every non-file request to `/index.html`, so deep links
+such as `/app` and `/sign-up` are resolved by React Router instead of returning
+a 404. Vercel checks the filesystem before applying rewrites, so hashed assets
+under `/assets/`, `favicon.ico` and `robots.txt` are still served directly.

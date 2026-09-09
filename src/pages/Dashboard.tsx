@@ -1,24 +1,22 @@
-import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 import { Zap, LogOut } from "lucide-react";
+
+import type { AuthenticatedOutletContext } from "@/components/ProtectedRoute";
+import { usePageMeta } from "@/hooks/use-page-meta";
 import { supabase } from "@/integrations/supabase/client";
 
-export const Route = createFileRoute("/_authenticated/app")({
-  head: () => ({
-    meta: [
-      { title: "Dashboard — Video Speed Reader" },
-      { name: "description", content: "Your Video Speed Reader dashboard." },
-    ],
-  }),
-  component: AppPage,
-});
+export default function DashboardPage() {
+  usePageMeta({
+    title: "Dashboard — Video Speed Reader",
+    description: "Your Video Speed Reader dashboard.",
+  });
 
-function AppPage() {
-  const { user } = Route.useRouteContext();
+  const { user } = useOutletContext<AuthenticatedOutletContext>();
   const navigate = useNavigate();
 
   async function handleSignOut() {
     await supabase.auth.signOut();
-    navigate({ to: "/", replace: true });
+    navigate("/", { replace: true });
   }
 
   return (

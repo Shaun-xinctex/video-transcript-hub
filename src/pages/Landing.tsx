@@ -1,27 +1,7 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link } from "react-router-dom";
 import { FileText, Zap, BadgeCheck } from "lucide-react";
 
-export const Route = createFileRoute("/")({
-  head: () => ({
-    meta: [
-      { title: "Video Speed Reader — Video to transcript in 3 minutes" },
-      {
-        name: "description",
-        content:
-          "Upload your video, get a clean, high-accuracy transcript in three minutes. Built for creators, educators, and engineers.",
-      },
-      { property: "og:title", content: "Video Speed Reader — Video to transcript in 3 minutes" },
-      {
-        property: "og:description",
-        content:
-          "Upload your video, get a clean, high-accuracy transcript in three minutes.",
-      },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-    ],
-  }),
-  component: LandingPage,
-});
+import { usePageMeta } from "@/hooks/use-page-meta";
 
 const features = [
   {
@@ -44,7 +24,13 @@ const features = [
   },
 ];
 
-function LandingPage() {
+export default function LandingPage() {
+  usePageMeta({
+    title: "Video Speed Reader — Video to transcript in 3 minutes",
+    description:
+      "Upload your video, get a clean, high-accuracy transcript in three minutes. Built for creators, educators, and engineers.",
+  });
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
@@ -57,7 +43,7 @@ function LandingPage() {
             <span className="text-base font-semibold tracking-tight">Video Speed Reader</span>
           </Link>
           <Link
-            to="/auth"
+            to="/sign-in"
             className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Sign in / 登入
@@ -80,7 +66,7 @@ function LandingPage() {
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
-                to="/auth"
+                to="/sign-in"
                 className="inline-flex h-12 w-full items-center justify-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-[0_10px_40px_-10px_var(--primary)] transition-opacity hover:opacity-90 sm:w-auto"
               >
                 Sign in / 登入
