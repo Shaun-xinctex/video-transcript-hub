@@ -1,6 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
 
-import { brokeredPreviewStorage } from "./previewAuthStorage";
 import type { Database } from "./types";
 
 function isNewSupabaseApiKey(value: string): boolean {
@@ -53,7 +52,6 @@ function createSupabaseClient() {
       fetch: createSupabaseFetch(SUPABASE_PUBLISHABLE_KEY),
     },
     auth: {
-      storage: brokeredPreviewStorage(),
       persistSession: true,
       autoRefreshToken: true,
     },

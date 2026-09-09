@@ -18,7 +18,7 @@ The site must include:
 
    - Footer with copyright "© 2026 Video Speed Reader"
 
-2. Authentication using Lovable's built-in Supabase-style auth (use whatever auth backend Lovable provides by default — Lovable Cloud is fine for this v1; we'll swap to a user-owned Supabase project in a later step):
+2. Authentication backed by our own Supabase project (email + password against Supabase's default `auth.users`):
 
    - Sign Up page with email + password
 
