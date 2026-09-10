@@ -1,7 +1,7 @@
-import { Link } from "react-router-dom";
+import Link from "next/link";
 import { FileText, Zap, BadgeCheck } from "lucide-react";
 
-import { usePageMeta } from "@/hooks/use-page-meta";
+import { Brand, SiteFooter } from "@/components/site/Brand";
 
 const features = [
   {
@@ -25,25 +25,14 @@ const features = [
 ];
 
 export default function LandingPage() {
-  usePageMeta({
-    title: "Video Speed Reader — Video to transcript in 3 minutes",
-    description:
-      "Upload your video, get a clean, high-accuracy transcript in three minutes. Built for creators, educators, and engineers.",
-  });
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
       <header className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Zap className="h-4 w-4" />
-            </span>
-            <span className="text-base font-semibold tracking-tight">Video Speed Reader</span>
-          </Link>
+          <Brand />
           <Link
-            to="/sign-in"
+            href="/sign-in"
             className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
           >
             Sign in / 登入
@@ -66,7 +55,7 @@ export default function LandingPage() {
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
-                to="/sign-in"
+                href="/sign-in"
                 className="inline-flex h-12 w-full items-center justify-center rounded-lg bg-primary px-8 text-base font-semibold text-primary-foreground shadow-[0_10px_40px_-10px_var(--primary)] transition-opacity hover:opacity-90 sm:w-auto"
               >
                 Sign in / 登入
@@ -99,12 +88,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border/60">
-        <div className="mx-auto flex h-16 max-w-6xl items-center justify-center px-4 text-sm text-muted-foreground sm:px-6">
-          © 2026 Video Speed Reader
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
