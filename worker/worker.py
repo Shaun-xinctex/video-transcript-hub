@@ -57,6 +57,10 @@ def update_session(session_id: str, **fields) -> None:
 
 def download_video(url: str, dest_dir: Path) -> Path:
     """yt-dlp for URLs; pass through for local file paths."""
+    # Strip surrounding whitespace first: a leading tab or newline makes the
+    # startswith() check below fail, and the URL is then silently treated as a
+    # local path -- ffmpeg fails on a nonexistent file and the job stalls.
+    url = url.strip()
     if url.startswith(("http://", "https://")):
         out_template = str(dest_dir / "video.%(ext)s")
         subprocess.run(["yt-dlp", "-o", out_template, url], check=True)

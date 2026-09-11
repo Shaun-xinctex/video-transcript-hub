@@ -21,8 +21,8 @@ export function UploadForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          video_source_url: videoSourceUrl,
-          topic: topic || null,
+          video_source_url: videoSourceUrl.trim(),
+          topic: topic.trim() || null,
           language,
         }),
       });
