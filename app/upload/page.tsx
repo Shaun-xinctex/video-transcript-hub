@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { Download } from "lucide-react";
 
 import { Brand, SiteFooter } from "@/components/site/Brand";
+import { CreditsBadge } from "@/components/site/CreditsBadge";
 import { SignOutButton } from "@/components/site/SignOutButton";
 import { UploadForm } from "@/components/site/UploadForm";
 import { createClient } from "@/lib/supabase/server";
@@ -29,6 +30,8 @@ const STATUS_STYLES: Record<string, string> = {
   downloading: "border-border bg-secondary text-muted-foreground",
   transcribe: "border-sky-500/40 bg-sky-500/10 text-sky-300",
   done: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
+  error: "border-destructive/40 bg-destructive/10 text-destructive-foreground",
+  insufficient_credits: "border-amber-500/40 bg-amber-500/10 text-amber-300",
 };
 
 function truncate(value: string, max = 50) {
@@ -58,6 +61,7 @@ export default async function UploadPage() {
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Brand />
           <div className="flex items-center gap-3">
+            <CreditsBadge />
             <Link
               href="/app"
               className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"

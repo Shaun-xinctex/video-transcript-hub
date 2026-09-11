@@ -1,11 +1,18 @@
 """
-M1 worker: polls one job at a time, downloads the video, runs Whisper,
-writes TXT back to job_sessions.subtitle_txt_content.
+M2 worker: polls one job at a time, checks the user's credit balance against the
+video duration, downloads the video, runs Whisper, writes TXT back to
+job_sessions.subtitle_txt_content, then deducts credits on success.
 
 Started by distributor.py (one Popen per pending job). Reads JOB_ID from env.
 Reads OPENAI_API_KEY / SUPABASE_URL / SUPABASE_SECRET_KEY from AWS Secrets
 Manager — the EC2's IAM instance profile grants `secretsmanager:GetSecretValue`
 on exactly those three secret names, so no credentials ever live on disk.
+
+M2 additions:
+  * claim the job (status -> 'downloading') before any external work
+  * probe duration cheaply via yt-dlp, fall back to ffprobe after download
+  * mark 'insufficient_credits' and skip Whisper when the balance is short
+  * write a 'deduction' ledger row and decrement profiles.credits_balance on done
 """
 import os
 import sys
@@ -13,6 +20,7 @@ import math
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 import boto3
 from openai import OpenAI
@@ -54,6 +62,91 @@ def update_job(job_id: str, **fields) -> None:
 def update_session(session_id: str, **fields) -> None:
     db.table("job_sessions").update(fields).eq("id", session_id).execute()
 
+
+# ---------------------------------------------------------------- credits ---
+
+def get_balance(user_id: str) -> float:
+    row = (
+        db.table("profiles")
+        .select("credits_balance")
+        .eq("id", user_id)
+        .single()
+        .execute()
+        .data
+    )
+    return float(row["credits_balance"]) if row else 0.0
+
+
+def probe_duration_minutes_cheap(video_url: str) -> Optional[int]:
+    """Probe duration WITHOUT downloading. Returns ceil(seconds / 60), or None if
+    the source doesn't expose duration in its manifest (CloudFront direct mp4s,
+    some Internet Archive items, ...). On None, fall back to ffprobe after download.
+
+    yt-dlp prints the literal string 'NA' for such sources -- float("NA") raises
+    ValueError and would kill the worker before it ever reaches Whisper.
+    """
+    try:
+        out = subprocess.check_output(
+            ["yt-dlp", "--print", "duration", "--no-warnings", video_url],
+            text=True,
+            timeout=30,
+        ).strip()
+    except subprocess.SubprocessError:
+        return None
+    if not out or out.upper() == "NA":
+        return None
+    try:
+        seconds = float(out.splitlines()[0])
+    except ValueError:
+        return None
+    # Minimum 1 credit even for sub-minute clips; ceil so a 61s clip costs 2.
+    return max(1, math.ceil(seconds / 60))
+
+
+def block_for_insufficient_credits(job: dict, minutes: int, balance: float) -> None:
+    """Mark the job and write a zero-amount ledger row explaining why. No Whisper
+    call is made, so this path costs the platform nothing."""
+    update_job(job["id"], status="insufficient_credits")
+    db.table("credit_transactions").insert(
+        {
+            "user_id": job["user_id"],
+            "amount": 0,
+            "type": "deduction",
+            "description": f"Insufficient credits: video is {minutes} min, you have {int(balance)}",
+            "job_id": job["id"],
+        }
+    ).execute()
+    print(
+        f"[{job['id']}] insufficient credits — {minutes} min needed, {int(balance)} available",
+        flush=True,
+    )
+
+
+def deduct_credits(job: dict, minutes: int) -> float:
+    """Ledger row first (source of truth), then the derived balance.
+
+    Known race: two workers for the same user could clobber each other's
+    read-then-write. The distributor spawns one worker per job, so for v1 this
+    is accepted rather than pushed into a Postgres RPC.
+    """
+    db.table("credit_transactions").insert(
+        {
+            "user_id": job["user_id"],
+            "amount": -minutes,
+            "type": "deduction",
+            "description": f"Transcribed {minutes} min video",
+            "job_id": job["id"],
+        }
+    ).execute()
+
+    new_balance = max(0.0, get_balance(job["user_id"]) - minutes)
+    db.table("profiles").update({"credits_balance": new_balance}).eq(
+        "id", job["user_id"]
+    ).execute()
+    return new_balance
+
+
+# ---------------------------------------------------------------- pipeline ---
 
 def download_video(url: str, dest_dir: Path) -> Path:
     """yt-dlp for URLs; pass through for local file paths."""
@@ -134,26 +227,53 @@ def main() -> None:
     job = get_job(job_id)
     session_id = job["current_session_id"]
 
+    # Claim the job FIRST. Everything below can crash; once the status is off
+    # 'pending' the distributor's poll won't re-spawn us into a crash loop.
     update_job(job_id, status="downloading")
-    print(f"[{job_id}] downloading {job['video_source_url']}")
+
+    balance = get_balance(job["user_id"])
+    minutes = probe_duration_minutes_cheap(job["video_source_url"])
+
+    if minutes is not None and minutes > balance:
+        # Free gate: the manifest told us the duration, so we never downloaded
+        # a byte and never called Whisper.
+        block_for_insufficient_credits(job, minutes, balance)
+        return
+
+    print(f"[{job_id}] downloading {job['video_source_url']}", flush=True)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
         video = download_video(job["video_source_url"], tmp_path)
+
+        if minutes is None:
+            # No manifest duration (direct mp4 / S3 / CloudFront). We paid for
+            # the download, but ffprobe is now exact and Whisper is still ahead.
+            minutes = max(1, math.ceil(get_duration_seconds(video) / 60))
+            if minutes > balance:
+                block_for_insufficient_credits(job, minutes, balance)
+                return
+
         mp3 = to_mp3(video, tmp_path)
 
         update_job(job_id, status="transcribe")
         chunks = split_chunks(mp3, tmp_path)
-        print(f"[{job_id}] transcribing {len(chunks)} chunk(s)")
+        print(f"[{job_id}] transcribing {len(chunks)} chunk(s) — {minutes} credit(s)", flush=True)
 
         full_text = "\n\n".join(
             transcribe_chunk(c, job["language"]) for c in chunks
         )
 
         update_session(session_id, subtitle_txt_content=full_text)
+
+        # Deduct only on success. A failed job never costs the user credits.
+        new_balance = deduct_credits(job, minutes)
         update_job(job_id, status="done")
 
-    print(f"[{job_id}] done — {len(full_text)} chars")
+    print(
+        f"[{job_id}] done — {len(full_text)} chars, -{minutes} credits, balance {new_balance}",
+        flush=True,
+    )
 
 
 if __name__ == "__main__":

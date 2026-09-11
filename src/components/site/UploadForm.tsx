@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export function UploadForm() {
@@ -8,12 +9,14 @@ export function UploadForm() {
   const [topic, setTopic] = useState("");
   const [language, setLanguage] = useState("zh");
   const [error, setError] = useState<string | null>(null);
+  const [outOfCredits, setOutOfCredits] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setOutOfCredits(false);
     setLoading(true);
 
     try {
@@ -30,6 +33,8 @@ export function UploadForm() {
       const payload = await res.json().catch(() => ({}));
 
       if (!res.ok) {
+        // 402 is the credit floor from /api/jobs — offer the fix inline.
+        if (res.status === 402) setOutOfCredits(true);
         setError(payload?.error ?? `Request failed (${res.status})`);
         return;
       }
@@ -106,6 +111,14 @@ export function UploadForm() {
         {error && (
           <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive-foreground">
             {error}
+            {outOfCredits && (
+              <>
+                {" "}
+                <Link href="/credits" className="font-semibold underline">
+                  Buy credits
+                </Link>
+              </>
+            )}
           </p>
         )}
 
