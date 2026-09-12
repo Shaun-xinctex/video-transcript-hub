@@ -4,9 +4,11 @@ video duration, downloads the video, runs Whisper, writes TXT back to
 job_sessions.subtitle_txt_content, then deducts credits on success.
 
 Started by distributor.py (one Popen per pending job). Reads JOB_ID from env.
-Reads OPENAI_API_KEY / SUPABASE_URL / SUPABASE_SECRET_KEY from AWS Secrets
-Manager — the EC2's IAM instance profile grants `secretsmanager:GetSecretValue`
-on exactly those three secret names, so no credentials ever live on disk.
+Reads OPENAI_API_KEY / SUPABASE_URL / SUPABASE_SECRET_KEY from the environment
+when all three are present (M4: injected into the Fargate task by the Lambda
+distributor), otherwise from AWS Secrets Manager (M1: the EC2's IAM instance
+profile grants `secretsmanager:GetSecretValue` on exactly those three secret
+names). Either way no credentials ever live on disk.
 
 M2 additions:
   * claim the job (status -> 'downloading') before any external work
@@ -34,14 +36,32 @@ def _get_secret(client, name: str) -> str:
     return client.get_secret_value(SecretId=name)["SecretString"]
 
 
+# env var name -> Secrets Manager secret name (the M1 fallback path)
+_SECRET_NAMES = {
+    "OPENAI_API_KEY": "openai-api-key",
+    "SUPABASE_URL": "supabase-url",
+    "SUPABASE_SECRET_KEY": "supabase-secret-key",
+}
+
+
 def _load_secrets() -> dict[str, str]:
-    """Pull the three M1 secrets from AWS Secrets Manager."""
+    """Env vars first (M4 / Fargate), AWS Secrets Manager as fallback (M1 / EC2).
+
+    On Fargate the Lambda distributor injects all three through
+    containerOverrides[].environment, and the worker task role is deliberately
+    minimal (no `secretsmanager:GetSecretValue`) -- so the env path has to win
+    there or this module dies on import.
+
+    On the EC2 none of the three are in the environment (the systemd unit sets
+    only PATH + AWS_DEFAULT_REGION, and distributor.py forwards os.environ plus
+    JOB_ID), so the Secrets Manager fallback runs exactly as it did in M1.
+    The same image therefore works in both places.
+    """
+    if all(os.environ.get(k) for k in _SECRET_NAMES):
+        return {k: os.environ[k] for k in _SECRET_NAMES}
+
     sm = boto3.client("secretsmanager")
-    return {
-        "OPENAI_API_KEY": _get_secret(sm, "openai-api-key"),
-        "SUPABASE_URL": _get_secret(sm, "supabase-url"),
-        "SUPABASE_SECRET_KEY": _get_secret(sm, "supabase-secret-key"),
-    }
+    return {k: _get_secret(sm, name) for k, name in _SECRET_NAMES.items()}
 
 
 _secrets = _load_secrets()
