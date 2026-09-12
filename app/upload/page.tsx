@@ -23,6 +23,7 @@ type JobRow = {
   created_at: string;
   video_source_url: string;
   status: string;
+  error_message: string | null;
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -48,7 +49,7 @@ export default async function UploadPage() {
 
   const { data } = await supabase
     .from("jobs")
-    .select("id, created_at, video_source_url, status")
+    .select("id, created_at, video_source_url, status, error_message")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(20);
@@ -111,6 +112,11 @@ export default async function UploadPage() {
                           >
                             {job.status}
                           </span>
+                          {job.error_message && (
+                            <p className="mt-1.5 max-w-[22rem] text-xs leading-snug text-muted-foreground">
+                              {truncate(job.error_message, 140)}
+                            </p>
+                          )}
                         </td>
                         <td className="py-3">
                           {job.status === "done" ? (

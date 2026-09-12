@@ -13,6 +13,8 @@ M2 additions:
   * probe duration cheaply via yt-dlp, fall back to ffprobe after download
   * mark 'insufficient_credits' and skip Whisper when the balance is short
   * write a 'deduction' ledger row and decrement profiles.credits_balance on done
+  * on any unhandled failure, mark 'error' + record error_message so a crashed
+    job never strands in a claimed status (credits are left untouched)
 """
 import os
 import sys
@@ -222,14 +224,28 @@ def transcribe_chunk(chunk_path: Path, language: str) -> str:
         )
 
 
-def main() -> None:
-    job_id = os.environ["JOB_ID"]
+def fail_job(job_id: str, exc: BaseException) -> None:
+    """Record why a claimed job died so the UI can stop spinning.
+
+    Best-effort by design: if this write itself fails we only log it. Re-raising
+    here would replace the original traceback with a less useful one.
+    """
+    message = f"{type(exc).__name__}: {exc}"[:2000]
+    try:
+        update_job(job_id, status="error", error_message=message)
+    except Exception as write_exc:
+        print(f"[{job_id}] could not record error state: {write_exc}",
+              file=sys.stderr, flush=True)
+    print(f"[{job_id}] error — {message}", file=sys.stderr, flush=True)
+
+
+def run_job(job_id: str) -> None:
     job = get_job(job_id)
     session_id = job["current_session_id"]
 
     # Claim the job FIRST. Everything below can crash; once the status is off
     # 'pending' the distributor's poll won't re-spawn us into a crash loop.
-    update_job(job_id, status="downloading")
+    update_job(job_id, status="downloading", error_message=None)
 
     balance = get_balance(job["user_id"])
     minutes = probe_duration_minutes_cheap(job["video_source_url"])
@@ -274,6 +290,21 @@ def main() -> None:
         f"[{job_id}] done — {len(full_text)} chars, -{minutes} credits, balance {new_balance}",
         flush=True,
     )
+
+
+def main() -> None:
+    job_id = os.environ["JOB_ID"]
+    try:
+        run_job(job_id)
+    except Exception as exc:
+        # run_job() claims the job before doing anything that can fail, so the
+        # distributor (which only polls status='pending') will never re-spawn
+        # us. Without this handler a transient yt-dlp / ffmpeg / Whisper error
+        # strands the job in 'downloading' forever and the user just watches a
+        # spinner. Credits are safe either way: deduct_credits() runs only
+        # after Whisper has already succeeded.
+        fail_job(job_id, exc)
+        raise
 
 
 if __name__ == "__main__":
