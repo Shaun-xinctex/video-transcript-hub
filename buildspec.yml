@@ -1,0 +1,24 @@
+# CodeBuild: build the worker image and push it to ECR.
+#
+# ECR_URI is set on the CodeBuild project (the repository URI, e.g.
+# <acct>.dkr.ecr.us-east-1.amazonaws.com/subtitle-worker). AWS_DEFAULT_REGION
+# is provided by CodeBuild itself. Requires privilegedMode=true on the project
+# or there is no Docker daemon to build with.
+#
+# Every command is quoted: CodeBuild parses this as YAML first, and an
+# unquoted command containing ": " is read as a nested key rather than a string.
+version: 0.2
+
+phases:
+  pre_build:
+    commands:
+      # docker login takes a registry host, not a repository path -- ${ECR_URI%%/*}
+      # strips the /subtitle-worker suffix so the credential is stored under the
+      # hostname docker actually looks up at push time.
+      - "aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${ECR_URI%%/*}"
+  build:
+    commands:
+      - "docker build -t $ECR_URI:latest ./worker"
+  post_build:
+    commands:
+      - "docker push $ECR_URI:latest"
